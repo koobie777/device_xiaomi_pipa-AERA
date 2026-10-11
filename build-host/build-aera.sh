@@ -61,6 +61,9 @@ export CCACHE_TEMPDIR="$CCACHE_DIR/tmp"
 export TMPDIR="$ROOT/out/.tmp"
 mkdir -p "$TMPDIR" "$CCACHE_TEMPDIR"
 "$CCACHE_EXEC" --max-size=50G >/dev/null
+# Persist the temp path too: ninja filters environment variables, while
+# ccache always reads the config inside CCACHE_DIR.
+"$CCACHE_EXEC" --set-config="temporary_dir=$CCACHE_TEMPDIR"
 
 echo "### Environment"
 echo "  root    $ROOT"
