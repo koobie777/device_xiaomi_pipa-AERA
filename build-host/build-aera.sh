@@ -7,7 +7,12 @@
 # Usage:
 #   bash build-aera.sh              # lunch + mka adbd recoveryimage
 #   TARGET=bootimage bash build-aera.sh
-set -uo pipefail
+#
+# No `set -u` anywhere in this script: envsetup.sh and the lunch/mka functions
+# it defines read unset variables freely (e.g. BUILD_VAR_CACHE_READY at
+# envsetup.sh:117), so nounset makes lunch fail instantly. Defaults are given
+# explicitly below instead.
+set -o pipefail
 
 ROOT="$HOME/android/AERA_16.0"
 LUNCH="${LUNCH:-twrp_pipa-bp2a-eng}"
@@ -15,6 +20,30 @@ TARGET="${TARGET:-recoveryimage}"
 LOG="$ROOT/build.log"
 
 cd "$ROOT" || { echo "FATAL: $ROOT missing -- run sync-aera.sh first"; exit 1; }
+
+# The lunch string is product-release-variant (e.g. twrp_pipa-bp2a-eng).
+# Product names use underscores, so splitting on '-' is unambiguous.
+#
+# Pin all three explicitly rather than trusting them to survive. If they are
+# missing when mka re-runs dumpvars, the failures are silent and misleading:
+#   - no TARGET_RELEASE -> falls back to trunk_staging, which this manifest
+#     does not ship, and release-config panics with "Missing config
+#     trunk_staging"
+#   - no TARGET_PRODUCT -> falls back to aosp_arm64 and happily builds the
+#     WRONG PRODUCT, generating out/soong/build.aosp_arm64.ninja with no error
+#     at all. Check the ninja filename if a build looks suspiciously generic.
+case "$LUNCH" in
+    *-*-*)
+        export TARGET_PRODUCT="${LUNCH%%-*}"
+        _rest="${LUNCH#*-}"
+        export TARGET_RELEASE="${_rest%-*}"
+        export TARGET_BUILD_VARIANT="${_rest##*-}"
+        ;;
+    *)
+        echo "FATAL: LUNCH must be product-release-variant, got '$LUNCH'"
+        exit 1
+        ;;
+esac
 
 if [ ! -f device/xiaomi/pipa/aera_pipa.mk ]; then
     echo "FATAL: device/xiaomi/pipa not in place -- sync-aera.sh did not finish"
@@ -33,21 +62,43 @@ mkdir -p "$TMPDIR"
 echo "### Environment"
 echo "  root    $ROOT"
 echo "  lunch   $LUNCH"
+echo "  product $TARGET_PRODUCT"
+echo "  release $TARGET_RELEASE"
+echo "  variant $TARGET_BUILD_VARIANT"
 echo "  target  $TARGET"
 echo "  cores   $(nproc)"
 echo "  log     $LOG"
 echo
 
-set +u   # envsetup.sh references unset vars
 # shellcheck disable=SC1091
 source build/envsetup.sh >/dev/null 2>&1
-set -u
 
 echo "### lunch $LUNCH"
-if ! lunch "$LUNCH" 2>&1 | tee "$LOG" | tail -25; then
+# Do NOT pipe lunch. It is a shell function, so `lunch ... | tee` runs it in a
+# subshell and every variable it exports -- TARGET_PRODUCT, TARGET_RELEASE,
+# TARGET_BUILD_VARIANT -- is discarded when that subshell exits. mka then
+# re-runs dumpvars with nothing set and AOSP falls back to the trunk_staging
+# release config (release_config.mk:267), which this manifest does not ship,
+# so release-config panics with "Missing config trunk_staging".
+#
+# Redirect to a file instead, which keeps lunch in this shell. (tail -25 on a
+# pipe also withheld all output until lunch finished, making a slow first
+# dumpvars look like a hang.)
+if ! lunch "$LUNCH" >"$LOG" 2>&1; then
     echo
-    echo "### lunch FAILED -- available choices:"
+    echo "### lunch FAILED"
+    tail -30 "$LOG"
+    echo
+    echo "### available choices:"
     grep -A20 'COMMON_LUNCH_CHOICES' device/xiaomi/pipa/AndroidProducts.mk 2>/dev/null || true
+    exit 1
+fi
+tail -22 "$LOG"
+echo "  TARGET_PRODUCT=${TARGET_PRODUCT:-<unset>} TARGET_RELEASE=${TARGET_RELEASE:-<unset>} TARGET_BUILD_VARIANT=${TARGET_BUILD_VARIANT:-<unset>}"
+
+if [ "${TARGET_PRODUCT:-}" != "twrp_pipa" ]; then
+    echo "FATAL: TARGET_PRODUCT is '${TARGET_PRODUCT:-<unset>}', expected twrp_pipa."
+    echo "       lunch did not take effect -- refusing to build the wrong product."
     exit 1
 fi
 
