@@ -56,7 +56,8 @@ odm                                                     /odm                   e
 /dev/block/bootdevice/by-name/dsp                       /dsp                   ext4    ro,nosuid,nodev,barrier=1                            wait,slotselect
 /dev/block/bootdevice/by-name/bluetooth                 /bluetooth             vfat    ro,shortname=lower,uid=1002,gid=3002,dmask=227,fmask=337,context=u:object_r:bt_firmware_file:s0 wait,slotselect
 
-/dev/block/bootdevice/by-name/cust                      /cust                  ext4    noatime,nosuid,nodev,discard                         wait
+# cust is the EndeavourOS /boot partition on this multiboot device.
+# Keep it out of recovery's mount, wipe, and backup paths.
 /dev/block/bootdevice/by-name/dtbo                      /dtbo                  emmc    defaults                                             slotselect
 /dev/block/bootdevice/by-name/modemst1                  /efs1                  emmc    defaults                                             defaults
 /dev/block/bootdevice/by-name/modemst2                  /efs2                  emmc    defaults                                             defaults

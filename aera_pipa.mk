@@ -52,13 +52,14 @@ AERA_FORCE_PREBUILT_KERNEL := 1
 # pipa is recovery-as-boot: there is no separate `recovery` partition, so the
 # AB-device-with-recovery-partition path must stay off.
 AERA_AB_DEVICE_WITH_RECOVERY_PARTITION := 0
+# Avoid automatic recovery reinjection across the Android/Linux boot slots.
+AERA_NO_REFLASH_CURRENT_RECOVERY := 1
 
 # --- Decryption -------------------------------------------------------------
 AERA_NO_RELOAD_AFTER_DECRYPTION := 1
 AERA_NO_TREBLE_COMPATIBILITY_CHECK := 1
 
 # --- Misc -------------------------------------------------------------------
-AERA_ENABLE_FRP_ADDON := 1
 AERA_USE_LZ4_COMPRESSION := 1
 # WLAN needs the vendor touch/wifi modules loaded in recovery; left off until
 # AERA_LOAD_VENDOR_MODULES is populated and verified on this device.

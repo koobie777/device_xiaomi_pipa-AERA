@@ -161,10 +161,9 @@ AERA_INCLUDE_FASTBOOTD := true
 AERA_INCLUDE_LPDUMP := true
 AERA_INCLUDE_LPTOOLS := true
 AERA_USE_TOOLBOX := true
-# Repack tools pull in a Magisk prebuilt whose legacy Android.mk is rejected by
-# the A16 Soong scanner. Not needed to boot recovery or decrypt data; enable
-# once that prebuilt is fixed.
-# AERA_INCLUDE_REPACKTOOLS := true
+# Recovery-as-boot automatically includes the backend's repack tools. Do not
+# invoke recovery ramdisk installation on the multiboot tablet: that path
+# writes both boot slots, including the EndeavourOS UEFI in boot_a.
 # AERA_INCLUDE_RESETPROP := true
 # AERA_INCLUDE_LIBRESETPROP := true
 

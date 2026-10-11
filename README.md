@@ -19,10 +19,23 @@ git clone -b aera-16.0 \
 
 source build/envsetup.sh
 lunch twrp_pipa-bp2a-eng
-mka adbd recoveryimage
+mka adbd bootimage
+python3 device/xiaomi/pipa/tools/make_fbboot_image.py
 ```
 
-Output lands in `out/target/product/pipa/`.
+Output lands in `out/target/product/pipa/boot.img`. With recovery-as-boot,
+`recoveryimage` does not produce a bootable image. Use `boot-fbboot.img` for
+`fastboot boot`; its `twrpfastboot=1` header flag prevents normal Android boot.
+Never flash that temporary-boot variant.
+
+On the multiboot tablet, select slot B before testing recovery. Slot A holds
+EndeavourOS UEFI; `cust` is Linux `/boot`, `rawdump` is its ESP, and `linux` is
+its root filesystem. Recovery omits `cust` and disables automatic recovery
+reflashing. Do not use recovery installer ZIPs or **Install Recovery Ramdisk**:
+the backend repacker still writes both boot slots.
+
+The build driver in `build-host/build-aera.sh` keeps `CCACHE_DIR`,
+`CCACHE_TEMPDIR`, and `TMPDIR` under `out/` so Android's sandbox can write them.
 
 The manifest README says AERA's projects are in a private org requiring an SSH
 key. That is **stale** — the repos are public and the HTTPS clone above works
@@ -93,6 +106,7 @@ Read off the device with `fastboot getvar` and `sgdisk`, not copied:
   needs tuning on-device.
 - `AERA_ENABLE_WLAN := 0` until `AERA_LOAD_VENDOR_MODULES` is populated with
   pipa's touch/wifi modules and verified.
-- Repack tools / resetprop are disabled: the upstream Magisk prebuilt's legacy
-  `Android.mk` is rejected by the A16 Soong scanner.
+- Resetprop remains disabled. Recovery-as-boot automatically includes repack
+  tools, even when the device does not request them; avoid their installation
+  actions on the multiboot tablet.
 - `AERA_FRAMERATE := 120` follows the base tree, though the panel is 144 Hz.

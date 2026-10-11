@@ -3,6 +3,40 @@
 Written 2026-10-11 for whoever picks this up next. Everything below was
 verified on the actual hardware unless marked otherwise.
 
+## Codex continuation — 2026-10-11
+
+The tablet is currently running EndeavourOS successfully (confirmed by the
+user). Leave it there during host builds. User also authorized Git uploads,
+additional clones/forks, and moving the build environment to NVMe.
+
+The source sync is complete. The latest actual pipa build reached compilation
+but failed because ccache wrote outside Android's writable sandbox. The build
+driver now puts cache/temp directories under `out/`, and uses **`bootimage`**:
+with `BOARD_USES_RECOVERY_AS_BOOT`, `recoveryimage` does not produce `boot.img`.
+
+WSL is being relocated from the F: SATA HDD to
+`C:\wsl\Ubuntu-24.04` (Samsung NVMe); `.wslconfig` also points swap at C:.
+WSL was shut down before the move. Resume with:
+
+```powershell
+wsl -d Ubuntu-24.04 -- bash /mnt/c/Users/CJ/pipa-eos/aera/build-aera.sh
+```
+
+Multiboot fixes: `cust` is omitted from recovery fstab/flags because it contains
+Linux `/boot`; automatic recovery reflashing is disabled. **The backend's
+Install Recovery Ramdisk/repacker still writes both boot slots. Do not use
+that action or a recovery installer ZIP on this tablet.** Select Android slot
+B before recovery partition operations.
+
+Generate `boot-fbboot.img` using `tools/make_fbboot_image.py`, then test it with
+`fastboot boot`. The temporary flag forces recovery even when the bootloader
+requests a normal boot. Never flash this variant. Its v3/v4 command-line size
+and payload validation were corrected; all 12 synthetic image tests pass.
+
+The notes below describe the earlier session; this continuation takes
+precedence where they differ. A completed image and hardware boot test are
+still pending.
+
 ---
 
 ## 1. Current state

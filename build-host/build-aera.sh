@@ -5,8 +5,7 @@
 # failing Soong/ninja run buries the real cause under thousands of lines.
 #
 # Usage:
-#   bash build-aera.sh              # lunch + mka adbd recoveryimage
-#   TARGET=bootimage bash build-aera.sh
+#   bash build-aera.sh              # lunch + mka adbd bootimage
 #
 # No `set -u` anywhere in this script: envsetup.sh and the lunch/mka functions
 # it defines read unset variables freely (e.g. BUILD_VAR_CACHE_READY at
@@ -16,7 +15,7 @@ set -o pipefail
 
 ROOT="$HOME/android/AERA_16.0"
 LUNCH="${LUNCH:-twrp_pipa-bp2a-eng}"
-TARGET="${TARGET:-recoveryimage}"
+TARGET="${TARGET:-bootimage}"
 LOG="$ROOT/build.log"
 
 cd "$ROOT" || { echo "FATAL: $ROOT missing -- run sync-aera.sh first"; exit 1; }
@@ -55,9 +54,13 @@ ulimit -n 65536 2>/dev/null || true
 export USE_CCACHE=1
 export CCACHE_EXEC=/usr/bin/ccache
 export LC_ALL=C
-# Keep the build off the Windows filesystem entirely.
-export TMPDIR="$ROOT/.tmp"
-mkdir -p "$TMPDIR"
+# Android's sandbox mounts the source tree and home read-only. Cache and
+# temporary files must live under out/, which is explicitly writable.
+export CCACHE_DIR="$ROOT/out/.ccache"
+export CCACHE_TEMPDIR="$CCACHE_DIR/tmp"
+export TMPDIR="$ROOT/out/.tmp"
+mkdir -p "$TMPDIR" "$CCACHE_TEMPDIR"
+"$CCACHE_EXEC" --max-size=50G >/dev/null
 
 echo "### Environment"
 echo "  root    $ROOT"
@@ -115,8 +118,9 @@ if [ "$rc" -eq 0 ]; then
     echo "### BUILD OK"
     ls -lh out/target/product/pipa/*.img 2>/dev/null || echo "(no .img found -- check the log)"
     echo
-    echo "Test it WITHOUT flashing:"
-    echo "  fastboot boot out/target/product/pipa/recovery.img"
+    echo "Create the temporary-boot image, then test it WITHOUT flashing:"
+    echo "  python3 device/xiaomi/pipa/tools/make_fbboot_image.py"
+    echo "  fastboot boot out/target/product/pipa/boot-fbboot.img"
     echo
     echo "WARNING: slot a currently holds EndeavourOS. Never flash recovery to"
     echo "boot_a. Target boot_b only, and only after fastboot boot works."

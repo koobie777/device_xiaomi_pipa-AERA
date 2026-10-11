@@ -39,19 +39,36 @@ MAGIC = b"ANDROID!"
 FLAG = b"twrpfastboot=1"
 CMDLINE_OFFSET = 0x2C   # boot header v3/v4: magic(8) kernel_size(4) ramdisk_size(4)
                         # os_version(4) header_size(4) reserved[4](16) header_version(4)
-CMDLINE_SIZE = 512
+CMDLINE_SIZE = 1536
 
 
 def patch(src, dst):
     with open(src, "rb") as f:
         data = bytearray(f.read())
 
-    if data[:8] != MAGIC:
+    if len(data) < CMDLINE_OFFSET + CMDLINE_SIZE or data[:8] != MAGIC:
         sys.exit("not an Android boot image: %s" % src)
 
     header_version = struct.unpack_from("<I", data, 0x28)[0]
-    if header_version < 3:
+    if header_version not in (3, 4):
         sys.exit("only boot header v3/v4 is supported (found v%d)" % header_version)
+
+    header_size = struct.unpack_from("<I", data, 0x14)[0]
+    expected_size = 1580 if header_version == 3 else 1584
+    if header_size != expected_size or len(data) < header_size:
+        sys.exit("invalid boot header size: %d (expected %d)" % (header_size, expected_size))
+
+    kernel_size, ramdisk_size = struct.unpack_from("<II", data, 8)
+    page_size = 4096  # Fixed for boot header v3/v4.
+    payload_end = page_size + sum(
+        (size + page_size - 1) // page_size * page_size
+        for size in (kernel_size, ramdisk_size)
+    )
+    if header_version == 4:
+        signature_size = struct.unpack_from("<I", data, 1580)[0]
+        payload_end += (signature_size + page_size - 1) // page_size * page_size
+    if len(data) < payload_end:
+        sys.exit("truncated boot image: %d bytes (requires at least %d)" % (len(data), payload_end))
 
     cur = bytes(data[CMDLINE_OFFSET:CMDLINE_OFFSET + CMDLINE_SIZE]).split(b"\0")[0]
     if FLAG in cur.split(b" "):

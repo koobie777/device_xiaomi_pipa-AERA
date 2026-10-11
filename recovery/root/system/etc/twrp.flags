@@ -29,8 +29,7 @@
 /misc               emmc     /dev/block/bootdevice/by-name/misc              flags=display="Misc"
 
 # Persistent Firmware & Properties
-/cust               ext4     /dev/block/bootdevice/by-name/cust              flags=display="Cust"
-/cust_image         emmc     /dev/block/bootdevice/by-name/cust              flags=display="Cust";backup=1
+# cust contains EndeavourOS /boot and is intentionally omitted.
 /persist            ext4     /dev/block/bootdevice/by-name/persist           flags=display="Persist"
 /persist_image      emmc     /dev/block/bootdevice/by-name/persist           flags=display="Persist";backup=1
 
