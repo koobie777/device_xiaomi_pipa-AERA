@@ -3,19 +3,22 @@
 AERA Recovery Project device tree for the Xiaomi Pad 6, codename `pipa`
 (SM8250 / Snapdragon 870, Adreno 650).
 
-**Status: untested bring-up.** This tree has not been built or booted yet. Boot
-it with `fastboot boot` before flashing anything.
+**Status: builds successfully; hardware testing in progress.** The first pipa
+image compiled on 2026-10-11. Use `fastboot boot` for bring-up testing.
 
 ## Build
 
 ```bash
 mkdir -p ~/android/AERA_16.0 && cd ~/android/AERA_16.0
 repo init -u https://github.com/AERA-Recovery/android_manifest.git -b aera-16.0
-repo sync -c --force-sync --no-clone-bundle --no-tags -j$(nproc)
 
 git clone -b aera-16.0 \
     https://github.com/koobie777/device_xiaomi_pipa-AERA.git \
     device/xiaomi/pipa
+
+mkdir -p .repo/local_manifests
+cp device/xiaomi/pipa/build-host/pipa-theme.xml .repo/local_manifests/
+repo sync -c --force-sync --no-clone-bundle --no-tags -j$(nproc)
 
 source build/envsetup.sh
 lunch twrp_pipa-bp2a-eng
@@ -36,6 +39,15 @@ the backend repacker still writes both boot slots.
 
 The build driver in `build-host/build-aera.sh` keeps `CCACHE_DIR`,
 `CCACHE_TEMPDIR`, and `TMPDIR` under `out/` so Android's sandbox can write them.
+
+## Appearance
+
+The native UI uses dark graphite surfaces with Xiaomi-inspired orange accents
+(`AERA_DEFAULT_ACCENT := ff6900`). Menus, buttons, and startup/fastboot/About
+branding follow the accent; saved user colors still take precedence. The local
+manifest pins the native accent hook and vendor Soong bridge in the maintainer's
+forks. Include it before syncing so the device default reaches both UI and
+backend compilation.
 
 The manifest README says AERA's projects are in a private org requiring an SSH
 key. That is **stale** — the repos are public and the HTTPS clone above works

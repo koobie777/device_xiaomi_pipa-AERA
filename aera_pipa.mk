@@ -14,6 +14,10 @@
 AERA_MAINTAINER := koobie777
 AERA_DEVICE_VERSION := Xiaomi_Pad_6
 
+# Xiaomi-inspired orange on the native dark graphite UI. Saved user colors
+# still override this first-start/reset default.
+AERA_DEFAULT_ACCENT := ff6900
+
 # --- Display ----------------------------------------------------------------
 # pipa is 1800x2880 at density 400, driven in recovery with ROTATION_RIGHT.
 # STATUS_H is scaled from the reference tree (120 at 2376) and is a starting

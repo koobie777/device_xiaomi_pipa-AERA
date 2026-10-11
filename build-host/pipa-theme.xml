@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+    <!-- Pinned native accent hook and build bridge for this device tree. -->
+    <remote name="aera-pipa" fetch="https://github.com/koobie777" />
+    <remove-project name="android_bootable_recovery" />
+    <remove-project name="android_vendor_recovery" />
+    <project path="bootable/recovery" name="android_bootable_recovery"
+             remote="aera-pipa" revision="f899c2b6406734838163f4cddd1d27cfeb32c9dc"
+             upstream="pipa-xiaomi-theme" />
+    <project path="vendor/recovery" name="android_vendor_recovery"
+             remote="aera-pipa" revision="4034f96ac83ee734f776706145f126c1cf17bddd"
+             upstream="pipa-xiaomi-theme" />
+</manifest>

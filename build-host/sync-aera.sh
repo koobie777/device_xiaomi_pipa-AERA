@@ -6,6 +6,7 @@
 set -euo pipefail
 
 ROOT="$HOME/android/AERA_16.0"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$HOME/bin:$PATH"
 
 mkdir -p "$ROOT"
@@ -19,6 +20,11 @@ else
     echo "### .repo already exists, skipping init"
 fi
 
+# Pin the native UI accent hook and its vendor Soong bridge. Keep this local
+# manifest alongside the device tree so a fresh sync reproduces the pipa UI.
+mkdir -p .repo/local_manifests
+cp "$SCRIPT_DIR/pipa-theme.xml" .repo/local_manifests/pipa-theme.xml
+
 echo
 echo "### repo sync -- this is the long part"
 date
@@ -30,11 +36,18 @@ date
 
 echo
 echo "### Placing the pipa device tree"
-rm -rf device/xiaomi/pipa
 mkdir -p device/xiaomi
-git clone -b aera-16.0 \
-    https://github.com/koobie777/device_xiaomi_pipa-AERA.git \
-    device/xiaomi/pipa
+if [ -d device/xiaomi/pipa/.git ]; then
+    git -C device/xiaomi/pipa fetch origin aera-16.0
+    git -C device/xiaomi/pipa merge --ff-only origin/aera-16.0
+elif [ -e device/xiaomi/pipa ]; then
+    echo "FATAL: device/xiaomi/pipa exists but is not a Git checkout"
+    exit 1
+else
+    git clone -b aera-16.0 \
+        https://github.com/koobie777/device_xiaomi_pipa-AERA.git \
+        device/xiaomi/pipa
+fi
 
 echo
 echo "### Sanity checks"
@@ -59,4 +72,5 @@ echo "### Done. Next:"
 echo "  cd $ROOT"
 echo "  source build/envsetup.sh"
 echo "  lunch twrp_pipa-bp2a-eng"
-echo "  mka adbd recoveryimage"
+echo "  mka adbd bootimage"
+echo "  python3 device/xiaomi/pipa/tools/make_fbboot_image.py"
