@@ -5,21 +5,22 @@ verified on the actual hardware unless marked otherwise.
 
 ## Codex continuation — 2026-10-11
 
-The tablet is currently running EndeavourOS successfully (confirmed by the
-user). Leave it there during host builds. User also authorized Git uploads,
-additional clones/forks, and moving the build environment to NVMe.
+EndeavourOS still boots successfully (user reconfirmed after the AERA test).
+**Slot B contains InfinityX, not LineageOS.** Its installed recovery identifies
+as `infinity_pipa` and uses the Lineage recovery UI. The user confirmed Android
+had not booted since the Linux setup, before today's RAM test; it currently
+stalls on a logo/black screen. Earlier notes say repartitioning wiped userdata.
+Verify the current data state before proposing a format; do not assume a new
+format is authorized. No partition has been flashed or erased in this session.
 
-The source sync is complete. The latest actual pipa build reached compilation
-but failed because ccache wrote outside Android's writable sandbox. The build
-driver now puts cache/temp directories under `out/`, and uses **`bootimage`**:
-with `BOARD_USES_RECOVERY_AS_BOOT`, `recoveryimage` does not produce `boot.img`.
-
-WSL is being relocated from the F: SATA HDD to
-`C:\wsl\Ubuntu-24.04` (Samsung NVMe); `.wslconfig` also points swap at C:.
-WSL was shut down before the move. Resume with:
+Both builds succeeded: baseline at 19:17 EDT (18:04), dark/orange rebuild at
+19:26 EDT (05:31). The ccache fix keeps all cache/temp directories under `out/`.
+Use **`bootimage`**: with recovery-as-boot, `recoveryimage` produces no boot.img.
+The WSL move from F: SATA HDD completed successfully; its VHD now resides at
+`C:\wsl\Ubuntu-24.04` on Samsung NVMe, and swap is on C: too. Rebuild with:
 
 ```powershell
-wsl -d Ubuntu-24.04 -- bash /mnt/c/Users/CJ/pipa-eos/aera/build-aera.sh
+wsl -d Ubuntu-24.04 -- bash /home/cj/android/AERA_16.0/device/xiaomi/pipa/build-host/build-aera.sh
 ```
 
 Multiboot fixes: `cust` is omitted from recovery fstab/flags because it contains
@@ -33,9 +34,46 @@ Generate `boot-fbboot.img` using `tools/make_fbboot_image.py`, then test it with
 requests a normal boot. Never flash this variant. Its v3/v4 command-line size
 and payload validation were corrected; all 12 synthetic image tests pass.
 
-The notes below describe the earlier session; this continuation takes
-precedence where they differ. A completed image and hardware boot test are
-still pending.
+The first hardware RAM test was explicitly on slot B: `set_active b`, then
+`fastboot boot boot-fbboot.img` succeeded at the bootloader, but the screen
+stayed completely black and no USB device appeared. User manually rebooted
+into installed recovery, then bootloader. We subsequently requested
+`fastboot reboot recovery` for logs; after Advanced > Enable ADB, installed
+recovery connected. `adb root` is denied (production build), and shell UID
+2000 cannot read `/sys/fs/pstore`. No format, mount, installer, or flash ran.
+No further AERA boot tests until the Android state is understood.
+
+Installed recovery kernel: `4.19.325-cip131-st15-perf-g647558de9e61` (Aug 18).
+Our prebuilt kernel: `4.19.325-cip135-st19-perf+` (Oct 5). Stock cmdline supplies
+`androidboot.usbcontroller=a600000.dwc3`; `/proc/bootconfig` is absent. Our v3
+image contains no DTB and uses the installed vendor_boot/DTBO on the active
+slot. Compatibility is a candidate, not a proven failure cause.
+
+Image audits confirm native UI executable/marker/font/dependencies, LZ4 kernel
+support, and exclusion of protected Linux partitions from fstab/flags. Actual
+init disassembly confirms the `twrpfastboot=1` forcing logic; the dynamic init
+symlink and linker layout are intentional. The baseline unsigned AVB footer
+verifies, but the header-only RAM helper invalidates its hash descriptor.
+Keep that RAM variant separate and never flash it.
+
+The user chose dark backgrounds with orange accents. `AERA_DEFAULT_ACCENT :=
+ff6900` is compiled into both native UI and backend; saved colors take
+precedence. Boot/fastboot/About branding uses the live accent. Sources are
+pinned in `build-host/pipa-theme.xml`: core `f899c2b6406734838163f4cddd1d27cfeb32c9dc`
+and vendor bridge `4034f96ac83ee734f776706145f126c1cf17bddd` on the maintainer's
+`pipa-xiaomi-theme` branches. Go/C++ validation and the full orange build pass.
+
+Windows artifacts:
+- `aera/builds/2026-10-11-baseline/boot-fbboot.img` (tested; black screen)
+- `aera/builds/2026-10-11-xiaomi-orange/boot.img` and `boot-fbboot.img` (not boot-tested)
+- `aera/verification/` and baseline folder contain image/startup audit reports.
+
+Next: retrieve EOS `/sys/fs/pstore` or `/var/lib/systemd/pstore` without clearing
+them; inspect Android data/metadata without writes. User is considering running
+Codex directly in EOS. Keep builds on the Windows NVMe host. CJ prefers visible
+live output and concise regular progress updates.
+
+The notes below are historical; this continuation takes precedence.
 
 ---
 

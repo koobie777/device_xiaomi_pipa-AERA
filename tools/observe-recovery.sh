@@ -3,7 +3,7 @@
 # This script does not mount, decrypt, format, flash, reboot, change slots,
 # set properties, or write device files. Redirect its stdout on the host.
 # Example (host shell; do not upload the script to /data):
-#   adb exec-out sh < observe-recovery.sh > recovery-observations.txt
+#   adb shell -T sh < observe-recovery.sh > recovery-observations.txt
 
 section() {
     printf '\n===== %s =====\n' "$1"
