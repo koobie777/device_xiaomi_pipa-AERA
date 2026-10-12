@@ -73,6 +73,143 @@ them; inspect Android data/metadata without writes. User is considering running
 Codex directly in EOS. Keep builds on the Windows NVMe host. CJ prefers visible
 live output and concise regular progress updates.
 
+## Claude continuation — 2026-10-11 (SSH access to the tablet)
+
+**Android is not bootable right now, so SSH into EOS is the only way onto this
+device.** It is also better than fastboot for diagnosis: with root you can read
+the raw boot partitions, which makes testing hypotheses evidence-based and
+makes flashing reversible.
+
+### How to connect
+
+The tablet runs sshd. Key is on the Windows host at
+`C:\Users\CJ\pipa-eos\ssh\pipa_ed25519`, and the public half is committed at
+`endeavouros-pipa:tools/claude-session.pub` (already in the tablet's
+`authorized_keys`, listed twice — harmless).
+
+```bash
+# from WSL (the Windows OpenSSH client works too)
+cp /mnt/c/Users/CJ/pipa-eos/ssh/pipa_ed25519 ~/.ssh/ && chmod 600 ~/.ssh/pipa_ed25519
+ssh -i ~/.ssh/pipa_ed25519 koobie777@192.168.40.86
+```
+
+`192.168.40.86`, user `koobie777`, passwordless sudo is configured. Revoke
+access with `sudo rm /etc/sudoers.d/zz-nopasswd` and by deleting the
+`claude-session-pipa` lines from `~/.ssh/authorized_keys`.
+
+### Three traps when driving it remotely
+
+1. **The login shell is fish.** `ssh host "bash -lc \"...\""` does NOT work:
+   fish parses the line first and mangles `$?`, `$(...)` and quoting before
+   bash ever sees it. **Pipe a script in instead** — this is the only reliable
+   shape:
+   ```bash
+   ssh ... "bash -s" < script.sh
+   ```
+   fish also has no `hostname` builtin; use `uname -n` or `/etc/hostname`.
+
+2. **sudoers.d is read in lexical order and the last match wins.** This image
+   ships `/etc/sudoers.d/wheel` (`%wheel ALL=(ALL:ALL) ALL`, password
+   required). A drop-in named `99-nopasswd` sorts *before* `wheel`, so wheel
+   overrode it and `sudo -n` kept failing while interactive sudo appeared to
+   work (cached timestamp). The file must sort **after** `wheel` — hence
+   `zz-nopasswd`. Verify with `sudo -k && sudo -n true`.
+
+3. **Do not generate ssh keys from PowerShell.** `ssh-keygen -N '""'` passes a
+   *literal two-quote passphrase*, so the key is encrypted and `BatchMode`
+   silently fails to sign:
+   ```
+   debug1: Server accepts key: ... ED25519 ...
+   debug2: we did not send a packet, disable method
+   ```
+   "Server accepts key" means the server already authorized it — a failure
+   after that line is **client-side**, not a server or authorized_keys problem.
+   Fix without regenerating: `ssh-keygen -p -f key -P '""' -N ''`.
+
+### Findings from the EOS side
+
+- **EOS is completely healthy.** `/` is `sda35` (`linux` partlabel, label
+  `eos-pipa`, 128G, the resize held), `/boot` is `sda28` (`cust`), ESP is
+  `sda27` (`rawdump`, label `EOSPIPAESP`). Booted via UEFI
+  (`/sys/firmware/efi` present); GRUB loaded `(hd5,gpt28)/Image.gz`.
+  `userdata` (`sda34`, 97.8G) has **no filesystem** — still unformatted.
+- **`qbootctl` is installed** (needs root). So slots can be switched from EOS
+  without a PC — but note that if you switch to a non-booting slot you need
+  physical volume-key access to get back to fastboot.
+- **pstore cannot capture anything new.** `/sys/fs/pstore/console-ramoops-0`
+  is dated **Sep 24** and `systemd-pstore` is **disabled/inactive**, so the
+  single slot stays permanently occupied and today's failed AERA boot was never
+  recorded. Saved to `aera/logs/console-ramoops-0-sep24.txt` (893 KB; it is a
+  wrapped buffer with no boot header, only a shutdown tail). **To capture a
+  future failed boot, the slot has to be freed first** — removing the file in
+  `/sys/fs/pstore` is what frees the backend entry, so copy it off before
+  deleting.
+- **The touchscreen is `NVT-ts-spi` — Novatek on SPI.** This settles the
+  Windows-on-ARM question: the cheap hope was HID-over-I²C, which Windows can
+  drive with its inbox `HIDI2C` driver and correct ACPI alone. SPI-attached
+  Novatek has no inbox path, so touch would need a driver written from
+  scratch. **Tri-boot is a dead end — treat it as closed, not deferred.**
+
+### CRITICAL: the earlier "no boot" results were invalid tests
+
+**Slot b's retry counter was already exhausted before any AERA test ran.**
+
+```
+slot-retry-count:a: 5
+slot-retry-count:b: 0      <-- refused outright
+```
+
+On an A/B device the bootloader decrements that counter per failed boot and,
+at zero without a `successful` mark, **refuses the slot entirely and falls
+back**. InfinityX had been failing to boot on slot b for a while (user
+reported Android stalling on a logo), so those retries were almost certainly
+burned by InfinityX, not by us.
+
+Consequence: Codex's `fastboot boot` black screen **and** the first
+slot-switch reboot both ran against a slot the bootloader was already
+declining. Neither tells us anything about the AERA image. **The kernel/DTB
+mismatch theory (`cip135-st19` vs `cip131-st15`) remains completely
+untested.**
+
+**`qbootctl -s b` does NOT replenish the retry counter** — it only flips the
+active flag. The bootloader's own `set_active` does:
+
+```bash
+fastboot set_active b     # retry count 0 -> 7
+```
+
+Always check `fastboot getvar slot-retry-count:b` before concluding anything
+from a failed boot on this device. If it did not decrease, no boot was
+attempted.
+
+### Current device state
+
+- `boot_b` holds the AERA image, verified byte-for-byte
+  (`f30d437091c67def7212cf8521b36d94ed668972bcf84aff3feea1c06fac37dc`)
+- Active slot `b`, retry count replenished to 7
+- Slot `a` bootable (retry 5) — EndeavourOS unaffected, SSH returns with it
+- **Backups in `aera/backups/`**: `boot_a.img`, `boot_b.img` (InfinityX,
+  `dd59cb44…`), `vendor_boot_b.img`, `dtbo_a.img`, `dtbo_b.img` — full
+  partition copies, so writing boot_b is reversible. Restore with
+  `dd if=backups/boot_b.img of=/dev/disk/by-partlabel/boot_b bs=1M` from EOS.
+- `vbmeta_b` was **not** backed up (EOS was unreachable at the time). Do that
+  before touching AVB.
+
+### Image structure comparison (measured, not assumed)
+
+| | InfinityX `boot_b` (known to boot) | our AERA image |
+|---|---|---|
+| header | v3 | v3 |
+| bootloader-visible DTB | none (0 FDT hits) | none |
+| DTB source | `vendor_boot_b` (3 FDT hits) | same |
+| kernel | `4.19.325-cip131-st15` | `4.19.325-cip135-st19` |
+
+Our image is the same *shape* as the one that boots, so it is not obviously
+malformed. Note a v3 boot image carries no DTB by design, which is why
+`fastboot boot` is a poor test on this device: the bootloader pairs boot with
+`vendor_boot`/`dtbo` on a normal boot but not necessarily for a RAM boot.
+Prefer flashing `boot_b` (now reversible) over `fastboot boot`.
+
 The notes below are historical; this continuation takes precedence.
 
 ---
